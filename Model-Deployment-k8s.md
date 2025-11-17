@@ -144,3 +144,87 @@ curl -X POST http://<NODE-IP>:30080/predict \
 
 Your HuggingFace model is now running in Kubernetes! <br>
 Simple. No Triton. No GPU requirement.
+
+
+Auto-scaling using CPU (HPA):
+-----------------------------
+Step 1 - Create : deployment.yaml
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hf-model
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hf-model
+  template:
+    metadata:
+      labels:
+        app: hf-model
+    spec:
+      containers:
+      - name: hf-model
+        image: yourrepo/hf-sentiment:1
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hf-model
+spec:
+  type: ClusterIP
+  selector:
+    app: hf-model
+  ports:
+  - port: 80
+    targetPort: 8000
+```
+
+Step 2 - Create Horizontal pod autoscaler:
+```
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hf-model-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hf-model
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+```
+
+Apply changes:
+```
+kubectl apply -f deployment.yaml
+kubectl apply -f hpa.yaml
+```
+
+check scaling:
+```
+kubectl get hpa
+```
+
+Now test by generating load:
+```
+while true; do curl -X POST http://10.96.11.14/predict  -H "Content-Type: application/json"  -d '{"text":"hello"}'; done
+```
+Note: Here i am using cluster IP from host machine, it will only work for the single node cluster. because it is in the same network.
