@@ -266,6 +266,7 @@ kubectl top pod
 ```
 <img width="656" height="73" alt="image" src="https://github.com/user-attachments/assets/cbc298b6-8d70-4616-8273-b2190f9b49ec" />
 
+Now verify Horizontal pod autoscaler: <br>
 ```
 kubectl get hpa
 ```
