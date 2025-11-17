@@ -1,0 +1,146 @@
+Simple model deployment with kubernetes:
+--------------------------------------
+Here is the simplest, cleanest possible example of deploying a Hugging Face model on Kubernetes without Triton or complex steps. <br>
+
+We will use: <br>
+✅ Model: distilbert-base-uncased <br>
+A tiny, fast text classifier model from HuggingFace. <br>
+
+We will run it using:<br>
+✅ Framework: FastAPI + Transformers<br>
+✅ Container: custom Docker image<br>
+✅ Kubernetes Deployment + Service<br>
+
+### Step 1 - install dependencies:
+```
+# install python3.10-venv package if not installed
+apt install python3.10-venv
+
+# create virtual environment
+python3 -m venv hf-venv
+source hf-venv/bin/activate
+
+# install huggingface-cli - If want to download model manually. (not required in this example. )
+pip install --upgrade huggingface_hub
+hf download distilbert/distilbert-base-uncased
+```
+
+### Step 2 - Create project folder:
+```
+mkdir hf-k8s-model
+cd hf-k8s-model
+```
+
+### Step 3 - Create app.py (FastAPI inference server)
+```
+from fastapi import FastAPI
+from pydantic import BaseModel
+from transformers import pipeline
+
+app = FastAPI()
+
+# Load HF model
+classifier = pipeline("sentiment-analysis", model="distilbert-base-uncased")
+
+class Request(BaseModel):
+    text: str
+
+@app.post("/predict")
+def predict(req: Request):
+    out = classifier(req.text)
+    return {"result": out}
+
+```
+
+### Step 4 - Create requirements.txt
+```
+fastapi
+uvicorn
+transformers
+torch
+```
+
+### Step 5 - Create Dockerfile:
+Here the model is downloaded from huggingface. thats why we have not downloaded this in step 1.
+```
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy app
+COPY app.py .
+
+# Download the model during build (optional)
+RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='distilbert-base-uncased')"
+
+# Expose port
+EXPOSE 8000
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+### Step 6 - Build and push image on dockerhub.
+```
+docker build -t <your-dockerhub-user>/hf-demo:latest .
+docker push <your-dockerhub-user>/hf-demo:latest
+```
+
+### Step 7 - Create kubernetes deployment
+Create file : hf-model.yaml
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hf-model
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hf-model
+  template:
+    metadata:
+      labels:
+        app: hf-model
+    spec:
+      containers:
+      - name: hf-container
+        image: <your-dockerhub-user>/hf-demo:latest
+        ports:
+        - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hf-model-service
+spec:
+  type: NodePort
+  selector:
+    app: hf-model
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080
+```
+### Deploy:
+```
+kubectl apply -f hf-model.yaml
+kubectl get pods -w
+```
+
+### Test model:
+```
+kubectl get nodes -o wide
+```
+
+```
+curl -X POST http://<NODE-IP>:30080/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text":"This is amazing!"}'
+```
+
+Your HuggingFace model is now running in Kubernetes! <br>
+Simple. No Triton. No GPU requirement.
