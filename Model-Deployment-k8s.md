@@ -236,6 +236,43 @@ Then there is an issue. <br>
 ⚠️ Your cluster does NOT have metrics-server installed <br>
 ⚠️ So HPA will NEVER autoscale <br>
 
+<img width="979" height="71" alt="image" src="https://github.com/user-attachments/assets/4ccd68bd-0aaf-494f-b421-c2eefb4891fa" />
 
+### Install metrics server:
+```
+kubectl top pod
+```
+If it is not showing, <br>
+
+install metrics server:
+```
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+Edit:
+```
+kubectl -n kube-system edit deployment metrics-server
+```
+Add this under spec.template.spec.containers[0].args:
+```
+        - --kubelet-insecure-tls
+        - --kubelet-preferred-address-types=InternalIP
+```
+Then restart,
+```
+kubectl rollout restart deployment metrics-server -n kube-system
+```
+Now check,
+```
+kubectl top pod
+```
+<img width="656" height="73" alt="image" src="https://github.com/user-attachments/assets/cbc298b6-8d70-4616-8273-b2190f9b49ec" />
+
+```
+kubectl get hpa
+```
+<img width="890" height="68" alt="image" src="https://github.com/user-attachments/assets/ebe4075b-6d27-40dc-a30b-844bfbb0bfe7" />
+
+Now according to this your pods will scale:
+<img width="639" height="272" alt="image" src="https://github.com/user-attachments/assets/d5cb1450-7fcb-4274-86db-753e5ec3f58c" />
 
 
