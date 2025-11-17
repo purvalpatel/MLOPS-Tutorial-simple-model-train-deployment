@@ -272,6 +272,8 @@ kubectl get hpa
 ```
 <img width="890" height="68" alt="image" src="https://github.com/user-attachments/assets/ebe4075b-6d27-40dc-a30b-844bfbb0bfe7" />
 
+
+<br>
 Now according to this your pods will scale: <br>
 <img width="639" height="272" alt="image" src="https://github.com/user-attachments/assets/d5cb1450-7fcb-4274-86db-753e5ec3f58c" />
 
