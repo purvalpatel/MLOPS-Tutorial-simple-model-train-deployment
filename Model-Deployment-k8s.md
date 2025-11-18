@@ -278,3 +278,13 @@ Now according to this your pods will scale: <br>
 <img width="639" height="272" alt="image" src="https://github.com/user-attachments/assets/d5cb1450-7fcb-4274-86db-753e5ec3f58c" />
 
 
+Auto-scaling with prometheus
+-----------------------------
+
+1. Application -> Exposing prometheus metrics from application. app.py, /metrics
+2. Prometheus scraps it --> Promethes scraps it from /metrices
+3. Prometheus adapter --> HPA Cant reads metrices from Prometheus, You must **install Prometheus adapter** into  prometheus. and configure it.
+4. HPA reads metrics --> HPA reads metrics from Prometheus adapter.
+5. Scale pods
+
+
