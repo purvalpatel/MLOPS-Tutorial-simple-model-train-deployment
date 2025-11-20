@@ -282,9 +282,191 @@ Auto-scaling with prometheus
 -----------------------------
 
 1. Application -> Exposing prometheus metrics from application. app.py, /metrics
-2. Prometheus scraps it --> Promethes scraps it from /metrices
-3. Prometheus adapter --> HPA Cant reads metrices from Prometheus, You must **install Prometheus adapter** into  prometheus. and configure it.
+2. Prometheus scraps it --> ServiceMonitor  tell Prometheus how to scrape metrics from your application.
+3. Prometheus adapter --> HPA Cant reads metrices from Prometheus, You must **install Prometheus adapter** into  prometheus and configure it. it expose metrics under **custom metrics** of kubernetes. its a bridge between **promethes** and **k8s custom metrics** api. 
 4. HPA reads metrics --> HPA reads metrics from Prometheus adapter.
 5. Scale pods
 
+So the flow will be: <br>
+```
+[Your app] -> [Prometheus] -> [Prometheus Adapter] -> [Kubernetes HPA] -> [Scaling] 
+```
 
+1. Building application FastAPI.
+app.py
+```
+from fastapi import FastAPI
+from pydantic import BaseModel
+from transformers import pipeline
+from prometheus_client import Counter, make_asgi_app
+
+app = FastAPI()
+requests_total = Counter("requests_total", "Total API Requests")
+
+# Load HF model
+classifier = pipeline("sentiment-analysis", model="distilbert-base-uncased")
+
+class Request(BaseModel):
+    text: str
+
+@app.post("/predict")
+def predict(req: Request):
+    requests_total.inc()
+    out = classifier(req.text)
+    return {"result": out}
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
+```
+requirements.txt
+```
+fastapi
+uvicorn
+transformers
+torch
+prometheus-client
+```
+
+Build docker image: <br>
+Dockerfile:
+```
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy app
+COPY app.py .
+
+# Download the model during build (optional)
+RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='distilbert-base-uncased')"
+
+# Expose port
+EXPOSE 8000
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+Build and push dockerimage:
+```
+docker build -t <your-dockerhub-user>/hf-demo:latest .
+docker push <your-dockerhub-user>/hf-demo:latest
+```
+Now create deployment: <br>
+deployment.yaml
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-sentiment
+  labels:
+    app: fastapi-sentiment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastapi-sentiment
+  template:
+    metadata:
+      labels:
+        app: fastapi-sentiment
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: fastapi-app
+        image: docker.merai.app/harshal/hf-model:0.2
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-sentiment-service
+  labels:
+    app: fastapi-sentiment
+spec:
+  selector:
+    app: fastapi-sentiment
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+```
+
+Apply changes:
+```
+kubectl apply -f deployment.yaml
+```
+
+Create servicemonitor to tell prometheus to scrap metrics from application:
+```
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: fastapi-sentiment-monitor
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+    - default
+  selector:
+    matchLabels:
+      app: fastapi-sentiment
+  endpoints:
+    - port: http        # MUST match the service port name
+      path: /metrics
+      interval: 15s
+```
+Create prometheus adapter to get metrics from prometheus, and expose it into custom metrics.
+```
+prometheus:
+  url: http://prometheus-kube-prometheus-prometheus.monitoring.svc
+rules:
+  custom:
+    - seriesQuery: 'requests_total{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          pod:
+            resource: pod
+      name:
+        matches: "^requests_total$"
+        as: "requests"
+      metricsQuery: 'sum(rate(requests_total{<<.LabelMatchers>>}[2m])) by (<<.GroupBy>>)'
+```
+upgrade helm for prometheus-adapter:
+```
+helm upgrade --install prometheus-adapter prometheus-community/prometheus-adapter   -f prometheus-adapter-values.yaml -n monitoring
+```
