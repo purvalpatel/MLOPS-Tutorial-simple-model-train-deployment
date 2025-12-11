@@ -595,4 +595,21 @@ Now check hpa,
 kubectl get hpa
 ```
 
+Allow Huggingface models:
+-------------------------
+1. Loging hugging face and on model page fill below details in terms of accepting terms. <br>
+<img width="1013" height="811" alt="image" src="https://github.com/user-attachments/assets/7983d4a7-ffa3-4752-86ed-2b1112649b93" />
+
+2. Create Access tokens if not have.
+Login hugging face -> Settings -> Access Token <br>
+<img width="1680" height="575" alt="image" src="https://github.com/user-attachments/assets/41396988-8419-448e-8f43-c242f4abf6a1" />
+
+Save the token on safe location. <br>
+
+3. Wait for the request to approve.
+Settings -> Gated Repository. <br>
+<img width="1468" height="850" alt="image" src="https://github.com/user-attachments/assets/85720a31-b954-414b-8c5e-da5c8060c48d" />
+
+
+
     
