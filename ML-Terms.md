@@ -62,3 +62,53 @@ Model Optimizations ( TensorRT Model Optimizer )
 
 5. Speculative decoding:
 - Guess now , check later.
+
+Ollama:
+------
+- Model runtime manager for LLM
+- Pull -> Manage -> run models
+- Handles - Model download, GPU/CPU runtime setup, Chat/Inference Interface, API server for integration
+
+TensorRT
+------
+- NVIDIA's high performance inference optimizer and runtime
+- run models much faster on GPU
+
+ONNX(Open neural network exchange)
+---------------------
+- its like universal file format for AI models
+- So models trained in one framework (pytorchm, tensorflow) can be used anywhere else without retraining.
+
+Optimizing GPU execution using:
+- FP16
+- Layer Fusion
+- Kernel Auto-tuning
+
+TensorRT-LLM
+-------------
+- Library  for optimizing LLM inference on NVIDIA GPU.
+- built on the top of TensorRT Stack, but specialized for LLM
+
+
+Safetensor
+------------
+- File format for storing model weights like .bin or .pt
+- designed to : safe, Fast and portable.
+- Older formats are (.bin, .pt) are pickle-based, meaning they can execute arbirary pytohn code when loaded. which creates security risk.
+
+- Pytorch model save weights like .safetensorts.
+- Its just data not executable code.
+- like zip file which stores only data.
+
+  Safetensor -> TensorRT-LLM <br>
+  1. Get a model
+  2. Convert using TensorRT-LLM ( trtllm-build )
+  3. Run it with TensorRT-LLM ( trtllm-serv ./enginge)
+
+ This is not production grade, this is for testing only. <br>
+
+ Realworld example: <br>
+ 1. Download model from huggingface. ( model.safetensor, config.json, tokenizer.json)
+ 2. Convert to tensorRT-LLM (trtllm build)
+ 3. Run model (trtllm-serv)
+ 4. Now you can query model
