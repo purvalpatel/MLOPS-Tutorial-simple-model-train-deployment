@@ -357,8 +357,8 @@ spec:
   - match:
     - uri:
         prefix: /llama3.3-70b/
-    rewrite:
-      uri: /
+    #rewrite:
+      #uri: /
     route:
     - destination:
 #        host: llama-service # <-- replace this
