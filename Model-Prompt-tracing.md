@@ -47,12 +47,16 @@ Docker Registry : docker.merai.app/devops/llama-llm-proxy:0.7
 
 ### API-Proxy image create:
 app.py
-```
+```PYTHON
 from fastapi import FastAPI, Request, HTTPException
 import requests
 import time
 import os
 import json
+
+# Logging
+import logging
+from logging.handlers import RotatingFileHandler
 
 # OpenTelemetry
 from opentelemetry import trace
@@ -89,14 +93,28 @@ trace.get_tracer_provider().add_span_processor(
 tracer = trace.get_tracer(__name__)
 
 # ---------------------------------------------------
+# Logging setup
+# ---------------------------------------------------
+LOG_FILE = os.getenv("LOG_FILE", "/data/llm_logs.jsonl")
+
+logger = logging.getLogger("llm_logger")
+logger.setLevel(logging.INFO)
+
+handler = RotatingFileHandler(LOG_FILE, maxBytes=50 * 1024 * 1024, backupCount=5)
+handler.setFormatter(logging.Formatter("%(message)s"))
+
+logger.addHandler(handler)
+
+# ---------------------------------------------------
 # Model routing
 # ---------------------------------------------------
 PATH_ROUTES = {
     "gemma3-27b": os.getenv("GEMMA3_URL", "http://gemma3-27b-service:8000"),
     "kimi": os.getenv("KIMI_URL", "http://kimi-service:8000"),
-    "llama": os.getenv("LLAMA_URL", "http://llama-service:8000"),
+    "llama3.3-70b": os.getenv("LLAMA_URL", "http://llama-service:8000"),
     "nucurate": os.getenv("NUCURATE_URL", "http://nucurate-model-service:8000"),
     "qwen3.5-27b": os.getenv("QWEN_URL", "http://qwen3-5-svc:8000"),
+    "gpt-oss": os.getenv("GPT_OSS_URL", "http://gpt-oss-svc:8000"),
 }
 
 DEFAULT_VLLM_URL = os.getenv("DEFAULT_VLLM_URL", "http://llama-service:8000")
@@ -153,32 +171,51 @@ def estimate_tokens(prompt, response):
 # ---------------------------------------------------
 async def _forward(data, backend_url, route_label, endpoint="/v1/chat/completions"):
 
-    messages = data.get("messages", [])
     model_name = data.get("model", route_label)
-
     full_url = f"{backend_url.rstrip('/')}{endpoint}"
 
     print(f"[PROXY] route={route_label} → {full_url}")
 
-    # Convert payload for completion models
-    if endpoint == "/v1/completions":
-        prompt = data.get("prompt")
-        if not prompt and messages:
-            prompt = messages[0].get("content", "")
-        data = {"model": model_name, "prompt": prompt}
+    # ---------------- NORMALIZE INPUT ----------------
+    messages = data.get("messages")
+    prompt = data.get("prompt")
 
+    # Handle completions endpoint
+    if endpoint == "/v1/completions":
+        if not prompt and messages:
+            # convert messages → prompt
+            prompt = " ".join([str(m.get("content", "")) for m in messages])
+
+        # Ensure prompt is string
+        if isinstance(prompt, list):
+            prompt = " ".join(prompt)
+
+        data = {
+            "model": model_name,
+            "prompt": prompt
+        }
+
+        input_payload = [{"role": "user", "content": prompt or ""}]
+
+    else:
+        # Chat format
+        if not messages and prompt:
+            messages = [{"role": "user", "content": prompt}]
+
+        input_payload = messages or []
+
+    # ---------------- TRACE ----------------
     with tracer.start_as_current_span(f"vllm-{route_label}-call", kind=SpanKind.CLIENT) as span:
 
-        # Mark LLM span
         span.set_attribute(SpanAttributes.OPENINFERENCE_SPAN_KIND, "LLM")
 
-        # ---------------- INPUT ----------------
+        # INPUT
         span.set_attribute(
             SpanAttributes.INPUT_VALUE,
-            json.dumps(messages)
+            json.dumps(input_payload)
         )
 
-        for i, msg in enumerate(messages):
+        for i, msg in enumerate(input_payload):
             span.set_attribute(f"llm.input_messages.{i}.message.role", msg.get("role", "user"))
             span.set_attribute(f"llm.input_messages.{i}.message.content", str(msg.get("content", "")))
 
@@ -197,7 +234,7 @@ async def _forward(data, backend_url, route_label, endpoint="/v1/chat/completion
             span.set_attribute("llm.latency", latency)
             raise HTTPException(status_code=500, detail=str(e))
 
-        # ---------------- OUTPUT ----------------
+        # OUTPUT
         span.set_attribute(
             SpanAttributes.OUTPUT_VALUE,
             json.dumps(output)[:2000]
@@ -207,13 +244,13 @@ async def _forward(data, backend_url, route_label, endpoint="/v1/chat/completion
 
         for i, choice in enumerate(output.get("choices", [])):
             msg = choice.get("message", {})
-            text = msg.get("content", "")
+            text = msg.get("content") or choice.get("text", "")
             response_text = text
 
             span.set_attribute(f"llm.output_messages.{i}.message.role", msg.get("role", "assistant"))
             span.set_attribute(f"llm.output_messages.{i}.message.content", text)
 
-        # ---------------- TOKENS ----------------
+        # TOKENS
         usage = output.get("usage")
 
         if usage:
@@ -221,7 +258,7 @@ async def _forward(data, backend_url, route_label, endpoint="/v1/chat/completion
             ct = usage.get("completion_tokens", 0)
             tt = usage.get("total_tokens", 0)
         else:
-            prompt_text = " ".join([str(m.get("content", "")) for m in messages])
+            prompt_text = input_payload[0]["content"] if input_payload else ""
             pt, ct, tt = estimate_tokens(prompt_text, response_text)
 
         span.set_attribute(SpanAttributes.LLM_TOKEN_COUNT_PROMPT, pt)
@@ -230,8 +267,30 @@ async def _forward(data, backend_url, route_label, endpoint="/v1/chat/completion
 
         span.set_attribute("llm.latency", latency)
 
-    return output
+        # ---------------- FILE LOGGING ----------------
+        try:
+            log_entry = {
+                "timestamp": time.time(),
+                "model": model_name,
+                "route": route_label,
+                "backend": backend_url,
+                "endpoint": endpoint,
+                "input": input_payload,   # 🔥 FIXED HERE
+                "output": output,
+                "latency": latency,
+                "tokens": {
+                    "prompt": pt,
+                    "completion": ct,
+                    "total": tt
+                }
+            }
 
+            logger.info(json.dumps(log_entry))
+
+        except Exception as log_err:
+            print("⚠️ Logging failed:", str(log_err))
+
+    return output
 
 # ---------------------------------------------------
 # Path routing
@@ -264,6 +323,7 @@ async def proxy_completion(request: Request):
     data = await safe_json(request)
     backend = resolve_by_model(data.get("model", ""))
     return await _forward(data, backend, data.get("model", "default"), endpoint="/v1/completions")
+
 ```
 
 Dockerfile:
