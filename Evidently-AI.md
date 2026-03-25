@@ -579,7 +579,40 @@ Select model -> Reports -> View Report.
 ### Open the HTML file in browser:
 <img width="1900" height="949" alt="image" src="https://github.com/user-attachments/assets/7b889612-f1ff-43a3-8cdb-204e58d9e139" />
 <br>
-Final Architecture: <br>
-<img width="1079" height="826" alt="vLLM-Deployment" src="https://github.com/user-attachments/assets/684f43e7-3acc-4dea-9083-1138313e08ec" />
-
-
+## Final Architecture:
+```
+                ┌──────────────────────────┐
+                │   LLM Proxy (FastAPI)    │
+                │ (/nucurate, /llama, etc.)│
+                └───────────┬──────────────┘
+                            │
+                            ▼
+                ┌──────────────────────────┐
+                │ Structured Logs (JSONL)  │
+                │ /data/llm_logs.jsonl     │
+                └───────────┬──────────────┘
+                            │  (PVC: hf-cache-pvc)
+                            ▼
+        ┌──────────────────────────────────────────┐
+        │  Kubernetes CronJob (Evidently)          │
+        │   runs every 15–30 min                   │
+        │   - feature extraction                   │
+        │   - per-model drift                      │
+        │   - workspace.add_run()                  │
+        └───────────┬──────────────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────────────────────┐
+        │ Evidently Workspace (PVC)             │
+        │ /data/evidently_workspace             │
+        │ - stores runs                         │
+        │ - stores drift history                │
+        └───────────┬───────────────────────────┘
+                    │
+                    ▼
+        ┌──────────────────────────────────────────┐
+        │ Evidently UI (Deployment + NodePort)     │
+        │ - reads workspace                        │
+        │ - shows reports + history                │
+        └──────────────────────────────────────────┘
+```
