@@ -3,7 +3,6 @@
 - Monitor and evaluate machine learning models after deployment.
 - Library that checks wheather your model is still working correctly in real-world data.
 
-
 ## Why ?
 - Training data = clean, controlled
 - Production data = messy, changing over time.
@@ -37,32 +36,35 @@ User → vLLM → Output
 ```
 **Evidently can be used to: It just automates this checking.** <br>
 
+**Phoenix** -> what happens in this request? <br>
+**Evidently AI** -> Is my model behaviour chnaging over time ?
+
+
+## setup:
+Lets Assume that this is your current architecture.
 ```
 user
   |
 istio ingress gateway
   |
-fastAPI proxy  -> Logs -> storage (file/db/kafka) -> Evidently AI -> Drift / reports
+fastAPI proxy  -> Logs -> storage (file/db/kafka)
   |
 Models (trace-level observability)
   |
 Phoenix
 ```
-**Phoenix** -> what happens in this request? <br>
-**Evidently AI** -> Is my model behaviour chnaging over time ?
 
-## setup:
 ### Step 1 -- Set logging into  FastAPI Proxy `app.py`
 - Logs stored into /data/llm_logs.jsonl
-- /data directory is mounted on pvc `hf-cache-pvc`.
+- /data directory is mounted on pvc. our pvc is `hf-cache-pvc`.
 
 ### Step 2 -- Create Docker image of evidently runner.
 - Note: Below code is for Single Dataset. <br>
 - It will generate single .html report.
-- Docker image : `docker.merai.app/devops/evidently:0.1`
-- Currently we are not using this .py.
+- Docker image : `docker.xxxx.xxxx/devops/evidently:0.1`
 
 evidently_runner.py 
+- This is for single dataset.
 ```
 """
 Evidently LLM Monitor — fixed for Evidently >= 0.7
@@ -214,18 +216,17 @@ CMD ["python", "evidently_runner.py"]
 ```
 Build and push docker image:
 ```
-Create repository in docker.merai.app
-sudo docker build -t docker.merai.app/devops/evidently:0.1 .
-sudo docker push docker.merai.app/devops/evidently:0.1
+Create repository in docker.xxxx.xxxx
+sudo docker build -t docker.xxx.xxx/devops/evidently:0.1 .
+sudo docker push docker.xxx.xxxx/devops/evidently:0.1
 ```
 #### evidently_runner.py for multiple datasets(models):
 - This will generate reports for each dataset and save them as separate HTML files.
 - path - `/data/kubernetes-nfs-storage/hf-cache/reports/`
-- So currently we are using this.
 - Docker image : `docker.merai.app/devops/evidently:0.2`
 
 evidently_runner.py
-
+- This is for multiple models dataset.
 ```
 """
 Evidently Multi-Model LLM Monitor
@@ -427,6 +428,7 @@ if __name__ == "__main__":
 
 ### Step 3 -- Create  deployment `evidently_deployment_job.yaml`.
 evidently_deployment_job.yaml
+- This is for single time execution. which is not for production. so, suggesting to not use job. instead of this use cronjob.
 ```
 apiVersion: batch/v1
 kind: Job
@@ -438,7 +440,7 @@ spec:
     spec:
       containers:
       - name: evidently
-        image: docker.merai.app/devops/evidently:0.2
+        image: docker.xxx.xxx/devops/evidently:0.2
         imagePullPolicy: Always
         volumeMounts:
         - name: logs
@@ -453,12 +455,43 @@ Apply:
 ```
 kubectl apply -f evidently_deployment_job.yaml
 ```
+Cronjob.yaml
+```
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: evidently-cron
+  namespace: vllm
+spec:
+  schedule: "*/30 * * * *"   # every 30 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: evidently
+            image: docker.merai.app/devops/evidently:0.2
+            imagePullPolicy: Always
+            command: ["python", "/app/evidently_runner.py"]
+
+            volumeMounts:
+            - name: logs
+              mountPath: /data
+
+          restartPolicy: OnFailure
+
+          volumes:
+          - name: logs
+            persistentVolumeClaim:
+              claimName: hf-cache-pvc
+```
+Apply:
+```
+kubectl apply -f Cronjob.yaml
+```
 > log file location on host: /data/kubernetes-nfs-storage/hf-cache/llm_logs.jsonl <br>
-> html file location on host : /data/kubernetes-nfs-storage/hf-cache/reports/*.html
-
-
-- Note : If Values are same in all records then it will not show in graph sometimes.
-- it will check all the records and if changes in every record then it will show data drift.
+> html file location on host : /data/kubernetes-nfs-storage/hf-cache/reports/*.html <br>
+> here, hf-cache-pvc storage path is `/data/kubernetes-nfs-storage/hf-cache/`.
 
 
 ### Ways to View reports:
@@ -468,7 +501,7 @@ kubectl apply -f evidently_deployment_job.yaml
 4. Grafana
 
 #### 1. Download in local and open in browser:
-![alt text](image-15.png)
+<img width="1890" height="921" alt="image" src="https://github.com/user-attachments/assets/0b4f48d7-2819-4106-8b5e-f8cb9f92863b" />
 
 
 #### 2. View in Evidently UI
@@ -491,7 +524,7 @@ spec:
     spec:
       containers:
       - name: evidently-ui
-        image: docker.merai.app/devops/evidently:0.2
+        image: docker.xxxx.xxxx/devops/evidently:0.2
         command:
           - evidently
           - ui
