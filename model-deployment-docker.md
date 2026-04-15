@@ -56,7 +56,7 @@ curl -X POST "http://10.120.130.62:11436/v1/chat/completions"    -H "Content-Typ
 ```
 # Qwen3-3-B model
 docker-compose.yaml
-```
+```YAML
 services:
   vllm-qwen3:
     image: vllm/vllm-openai:latest
