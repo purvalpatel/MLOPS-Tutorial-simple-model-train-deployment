@@ -1,5 +1,8 @@
 # llama3.3-70B Model
 docker-compose.yaml
+
+> Note: Download model from the Huggingface and run.
+
 ```YAML
 services:
   vllm-llama:
@@ -56,6 +59,9 @@ curl -X POST "http://10.120.130.62:11436/v1/chat/completions"    -H "Content-Typ
 ```
 # Qwen3-3-B model
 docker-compose.yaml
+
+> Note:  Load the already downloaded model.
+
 ```YAML
 services:
   vllm-qwen3:
@@ -90,3 +96,42 @@ start:
 ```
 docker-compose up -d
 ```
+
+# Custom model
+docker-compose.yaml
+
+> Note: Load the customized model. model is stored at - /Data-1/docker/volumes/vllm_data/models/nucurate-model
+
+```
+services:
+  vllm-qwen3:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-nucurate-model
+    runtime: nvidia
+    entrypoint: [""]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=5
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - VLLM_WORKER_MULTIPROC_METHOD=spawn
+    ipc: host
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    ports:
+      - "11438:8000"
+    volumes:
+      - /Data-1/docker/volumes/vllm_data/models/nucurate-model:/models
+    command: >
+      bash -c "pip install mistral_common -q &&
+      vllm serve /models
+      --served-model-name nucurate-model
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.9
+      --max-model-len 8192
+      --host 0.0.0.0
+      --port 8000"
+    restart: unless-stopped
+```
+start: `docker-compose.yaml`
+
