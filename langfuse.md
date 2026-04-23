@@ -583,9 +583,11 @@ spec:
       port: 8000
       targetPort: 8000
 ```
-![alt text](image-28.png)
+<img width="1909" height="912" alt="image" src="https://github.com/user-attachments/assets/42566027-bfd9-4bd1-86ba-98459ef9895f" />
+
 
 - Traces stored on S3: `s3://xxxx/cmo9yoahr0004za076c8u8wz0`
 
-<img width="1451" height="816" alt="vllm-deployment-22Apr" src="https://github.com/user-attachments/assets/eb880cea-bdb9-4b69-a922-0af23863087b" />
+<img width="1451" height="816" alt="vllm-deployment-23Apr" src="https://github.com/user-attachments/assets/d95baa2e-e0c5-4001-b096-35b2b0593de4" />
+
 
