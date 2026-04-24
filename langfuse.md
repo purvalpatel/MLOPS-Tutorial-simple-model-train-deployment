@@ -600,7 +600,32 @@ spec:
 - System prompt = Job role  ( How to Answer)
 - User Prompt = Task  ( What to Answser)
 
-## Implementation 
+## Two ways prompt can come:
+- User system prompt and langfuse system prompt.
+  
+1. From user/client
+```
+curl -X POST "http://10.10.110.53:30360/llama3.3-70b/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "model": "meta-llama/Llama-3.3-70B-Instruct",
+    "messages": [
+      {
+        "role": "system",                                          # 👉 this is system prompt
+        "content": "You are a helpful assistant. Answer clearly."
+      },
+      {
+        "role": "user",
+        "content": "What is the capital of France?"
+      }
+    ]
+  }'
+```
+
+2. Langfuse prompt management system ( backend )
+- This we have already checked earlier.
+
+## Implementation of Langfuse prompt management (backend)
 
 Make changes into app.py related to prompt management: <br>
 
@@ -1056,3 +1081,33 @@ You are a sarcastic assistant. Be funny.
 
 ### run curl again:
 - output will be different.
+
+## Case 1: Langfuse System prompt (backend) is already set, And User sends the system message.
+
+Recommended:
+```
+Curl Request
+   |
+Fast API (app.py)
+   | -- Remove users system promt message.
+   | -- Add langfuse system prompt.
+   |
+  LLM
+```
+
+Backend should control the system message. User should NOT.
+
+- Make below changes into Fast API.
+```
+## remove the users  system prompt.
+clean_messages = [
+    m for m in input_payload
+    if m.get("role") != "system"
+]
+
+## Add the system prompt.
+clean_messages.insert(0, {
+    "role": "system",
+    "content": final_prompt   # from Langfuse
+})
+```
