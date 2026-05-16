@@ -1,4 +1,34 @@
-Implemented project - https://github.com/purvalpatel/Sample-mlops-project
+# MlFlow
+```
+Github + Experiment tracer + Model registry for ML
+```
+
+### Without MLFlow:
+Noobody knows:
+- Which model performed best?
+- Which dataset was used ?
+- which hyperparameters worked ?
+- Which model is in production ?
+
+These becomes messy. <br>
+
+It helps track:
+- Experiments
+- Parameters
+- Versions
+- Metrics
+- Models
+- deployments
+
+## Core Components
+- Tracking
+- Model Registry
+- Artifacts
+- Deployments
+
+
+
+Implemented project - https://github.com/purvalpatel/Sample-mlops-project <br>
 
 - Experiment tracking + Model Registry.
 - Log metrics
@@ -10,6 +40,16 @@ Implemented project - https://github.com/purvalpatel/Sample-mlops-project
 ```
 Try 10 models -> Compare -> Pick best -> Deploy
 ```
+### Production stack:
+
+- MLflow + Kubernetes : scalable deployment
+- MLflow + GPUs :	deep learning
+- MLflow + DVC	: dataset versioning
+- MLflow + ArgoCD	: GitOps ML
+- MLflow + vLLM :	LLM serving
+- MLflow + LoRA	: fine-tuning tracking
+
+## Deployment MLFLow
 
 Deployment `mlflow-deployment.yaml`
 ```YAML
